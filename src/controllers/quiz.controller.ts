@@ -1,40 +1,37 @@
 import { Request, Response } from "express"
 import { BAD_REQUEST, CREATED, OK } from "http-status"
 import Quiz from "./../entity/Quiz"
-
 import db from "./../db"
 import Question from "../entity/Question"
 import QuestionOption from "../entity/QuestionOption"
 import Answer from "../entity/Answers"
 
-// get all quiz data
+// Get all quiz data
 export const getQuizzes = (req: Request, res: Response) => {
-  const quizzes = db.getQuiz.map((quiz) => {
-    return db.getQuizWithQuestionsById(quiz.id)
-  })
-
+  const quizzes = db.getQuiz.map((quiz) => db.getQuizWithQuestionsById(quiz.id))
   res.status(OK).send(quizzes)
 }
 
-// get quiz by id
+// Get quiz by id
 export const getQuizById = async (req: Request, res: Response) => {
   const quizId = +req.params.quizId
 
-  if (typeof quizId !== "number" || isNaN(quizId)) {
+  // Validate if quizId is a valid number
+  if (isNaN(quizId)) {
     res.status(BAD_REQUEST).json({ message: "Bad Request" })
     return
   }
 
   const quiz = db.getQuizWithQuestionsById(quizId)
-
   res.status(OK).json({ quiz })
 }
 
-// create quiz
+// Create quiz
 export const createQuiz = (req: Request, res: Response) => {
   const nextQuizId = db.getNextQuizId()
   const nextQuestionId = db.getNextQuestionId()
   const nextQuestionOptionId = db.getNextQuestionOptionId()
+
   const quiz = new Quiz(nextQuizId, req.body.quiz.title)
   const questions: Question[] = []
   const questionOptions: QuestionOption[] = []
@@ -54,6 +51,7 @@ export const createQuiz = (req: Request, res: Response) => {
         nextQuestionId + qId
       )
 
+      // Set the correct option for the question
       if (newQuestion.correctOption === qoId) {
         newQuestion.setCorrectOption = questionOption.getQuestionOptionId
       }
@@ -69,11 +67,10 @@ export const createQuiz = (req: Request, res: Response) => {
   db.addQuestionOptions(questionOptions)
 
   const result = db.getQuizWithQuestionsById(nextQuizId)
-
   res.status(CREATED).json({ quiz: result })
 }
 
-// submit answer
+// Submit answer
 export const submitAnswer = async (req: Request, res: Response) => {
   const quizId = +req.body.quizId
   const quiz = db.getQuiz.find((quiz) => quiz.id === quizId)
@@ -92,12 +89,12 @@ export const submitAnswer = async (req: Request, res: Response) => {
     return
   }
 
-  const alreadySubmittedExist = db.answers.find((answer) => {
-    return (
+  // Check if the user has already submitted an answer for this question
+  const alreadySubmittedExist = db.answers.find(
+    (answer) =>
       answer.userId === +req.body.userId &&
       answer.questionId === +req.body.questionId
-    )
-  })
+  )
 
   if (alreadySubmittedExist) {
     res.status(OK).json({ message: "Answer already submitted." })
@@ -124,6 +121,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
   res.status(OK).json({ message: "Congrats! You got it right." })
 }
 
+// Get user's score by quizId
 export const getUserScoreByQuizId = (req: Request, res: Response) => {
   const quizId = +req.params.quizId
   const userId = +req.params.userId
@@ -148,28 +146,24 @@ export const getUserScoreByQuizId = (req: Request, res: Response) => {
     (answer) => answer.userId === userId && answer.isCorrect
   ).length
 
+  // Calculate score percentage and create answer summary
   const result = {
     userId,
     name: user.name,
     quizId,
     title: quiz.title,
-    totalAnswers: db.answers.filter((answer) => answer.userId === userId)
-      .length,
-    correctAnswers: db.answers
-      .filter((answer) => answer.userId === userId)
-      .filter((answer) => answer.isCorrect).length,
+    totalAnswers: totalAnsweredQuestion,
+    correctAnswers: totalCorrectAnswer,
     answerSummary: db.answers
       .filter((answer) => answer.userId === userId)
-      .map((answer) => {
-        return {
-          questionId: answer.questionId,
-          text: db.questions.find(
-            (question) => question.questionId === answer.questionId
-          )?.text,
-          selectedOption: answer.selectedOption,
-          isCorrect: answer.isCorrect,
-        }
-      }),
+      .map((answer) => ({
+        questionId: answer.questionId,
+        text: db.questions.find(
+          (question) => question.questionId === answer.questionId
+        )?.text,
+        selectedOption: answer.selectedOption,
+        isCorrect: answer.isCorrect,
+      })),
     scorePercentage: Math.round(
       (totalCorrectAnswer / totalAnsweredQuestion) * 100
     ),
